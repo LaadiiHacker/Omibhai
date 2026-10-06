@@ -9,6 +9,6 @@
    Poora tareeqa DEPLOY_GUIDE.md me step-by-step likha hai.
    ============================================================ */
 window.OMI_CONFIG = {
-  SUPABASE_URL: "https://TUMHARI-PROJECT-URL.supabase.co",
-  SUPABASE_ANON_KEY: "TUMHARI-ANON-KEY-YAHAN-PASTE-KARO"
+  SUPABASE_URL: "https://bngotrznmfnbwdfmdxtq.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_93dVeaejC65OB81oNASQ1A_pvQQlPA8"
 };
