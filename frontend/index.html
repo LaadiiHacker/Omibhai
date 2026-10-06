@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a13">
+<title>Omi Bhai — Login</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+
+  <header class="brand">
+    <div class="logo">⚡</div>
+    <h1>OMI BHAI</h1>
+    <p class="tagline">Customer Manager</p>
+  </header>
+
+  <div id="cfgWarn" class="warn hidden">
+    ⚠️ <b>Supabase connect nahi hua!</b><br>
+    <span style="font-size:13px">frontend/config.js me apni SUPABASE_URL aur
+    SUPABASE_ANON_KEY likho. Tareeqa DEPLOY_GUIDE.md me hai.</span>
+  </div>
+
+  <div id="mainBlock">
+    <div class="tabs">
+      <button class="tab active" data-tab="login">Login</button>
+      <button class="tab" data-tab="register">Register</button>
+      <button class="tab" data-tab="owner">Owner Setup</button>
+    </div>
+
+    <!-- LOGIN -->
+    <section id="tab-login" class="card">
+      <h2>🔑 Login</h2>
+      <p>Staff apne email + password se login kare.</p>
+      <form id="loginForm">
+        <label>Email</label>
+        <input type="email" id="lEmail" required autocomplete="username" placeholder="tumhara@email.com">
+        <label>Password</label>
+        <input type="password" id="lPass" required autocomplete="current-password" placeholder="••••••••">
+        <button class="btn btn-primary" type="submit" id="lBtn">Login</button>
+      </form>
+      <div id="lErr" class="err-box hidden"></div>
+    </section>
+
+    <!-- REGISTER -->
+    <section id="tab-register" class="card hidden">
+      <h2>📝 Register (Staff)</h2>
+      <p>Naya staff yahan account banaye. <b>Owner approve karega</b> tab hi login kaam karega.</p>
+      <form id="regForm">
+        <label>Email</label>
+        <input type="email" id="rEmail" required autocomplete="username" placeholder="tumhara@email.com">
+        <label>Password</label>
+        <input type="password" id="rPass" required minlength="6" autocomplete="new-password" placeholder="Kam se kam 6 harf">
+        <button class="btn btn-primary" type="submit" id="rBtn">Request bhejo</button>
+      </form>
+      <div id="rErr" class="err-box hidden"></div>
+      <div id="rOk" class="ok-box hidden"></div>
+    </section>
+
+    <!-- OWNER SETUP -->
+    <section id="tab-owner" class="card hidden">
+      <h2>👑 Owner Setup <span style="font-size:12px;color:var(--muted)">(sirf pehli dafa)</span></h2>
+      <p>Apne email + password se login karo, phir wo <b>secret</b> likho jo tumne
+      Supabase me <b>owner_secret</b> ke naam se set kiya tha.</p>
+      <form id="ownerForm">
+        <label>Email</label>
+        <input type="email" id="oEmail" required placeholder="tumhara@email.com">
+        <label>Password</label>
+        <input type="password" id="oPass" required placeholder="••••••••">
+        <label>Owner Secret</label>
+        <input type="text" id="oSecret" required autocomplete="off" placeholder="Tumhara secret">
+        <button class="btn btn-primary" type="submit" id="oBtn">Claim Owner 👑</button>
+      </form>
+      <div id="oErr" class="err-box hidden"></div>
+    </section>
+  </div>
+
+  <!-- WAITING (approved nahi hue abhi) -->
+  <div id="waitBlock" class="card center hidden">
+    <h2>⏳ Approval ka intezaar hai</h2>
+    <p>Tumhari request owner ke paas chali gayi hai.<br>Approve hote hi tumhara login kaam karega.</p>
+    <button class="btn btn-ghost" id="wLogout">Logout</button>
+  </div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var A = window.OmiApp;
+
+  /* Tabs */
+  document.querySelectorAll(".tab").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (b) { b.classList.remove("active"); });
+      btn.classList.add("active");
+      ["login", "register", "owner"].forEach(function (t) {
+        document.getElementById("tab-" + t).classList.toggle("hidden", t !== btn.dataset.tab);
+      });
+    });
+  });
+
+  var sb;
+  try { sb = A.getSupabase(); }
+  catch (e) { A.showConfigError(); return; }
+
+  function showErr(id, msg) {
+    var el = document.getElementById(id);
+    el.textContent = msg; el.classList.remove("hidden");
+  }
+  function hideErr(id) { document.getElementById(id).classList.add("hidden"); }
+
+  /* Pehle se login hai? → sahi page par bhejo */
+  sb.auth.getSession().then(async function (res) {
+    var s = res.data.session;
+    if (!s) return;
+    try {
+      var p = await A.getMyProfile(sb, s.user.id);
+      if (!p || !p.approved) {
+        document.getElementById("mainBlock").classList.add("hidden");
+        document.getElementById("waitBlock").classList.remove("hidden");
+        return;
+      }
+      window.location.href = p.is_admin ? "admin.html" : "app.html";
+    } catch (e) { /* profile na mile to login par hi raho */ }
+  });
+
+  document.getElementById("wLogout").addEventListener("click", function () { A.logout(sb); });
+
+  /* ---------- LOGIN ---------- */
+  document.getElementById("loginForm").addEventListener("submit", async function (e) {
+    e.preventDefault(); hideErr("lErr");
+    var btn = document.getElementById("lBtn"); btn.disabled = true; btn.textContent = "Ruko...";
+    try {
+      var email = document.getElementById("lEmail").value.trim();
+      var pass = document.getElementById("lPass").value;
+      var r = await sb.auth.signInWithPassword({ email: email, password: password });
+      if (r.error) throw r.error;
+      var p = await A.getMyProfile(sb, r.data.user.id);
+      if (!p || !p.approved) { window.location.reload(); return; }
+      window.location.href = p.is_admin ? "admin.html" : "app.html";
+    } catch (err) {
+      showErr("lErr", "Login nahi hua: " + err.message);
+      btn.disabled = false; btn.textContent = "Login";
+    }
+  });
+
+  /* ---------- REGISTER ---------- */
+  document.getElementById("regForm").addEventListener("submit", async function (e) {
+    e.preventDefault(); hideErr("rErr");
+    document.getElementById("rOk").classList.add("hidden");
+    var btn = document.getElementById("rBtn"); btn.disabled = true; btn.textContent = "Ruko...";
+    try {
+      var email = document.getElementById("rEmail").value.trim();
+      var pass = document.getElementById("rPass").value;
+      var r = await sb.auth.signUp({ email: email, password: pass });
+      if (r.error) throw r.error;
+      if (!r.data.session) {
+        var ok = document.getElementById("rOk");
+        ok.innerHTML = "✅ Account ban gaya! Email me confirmation link gaya hai — usay click karo, phir <b>Login</b> tab se login karo.";
+        ok.classList.remove("hidden");
+      } else {
+        /* Email confirm OFF hai → foran waiting screen */
+        window.location.reload();
+      }
+    } catch (err) {
+      showErr("rErr", "Register nahi hua: " + err.message);
+    }
+    btn.disabled = false; btn.textContent = "Request bhejo";
+  });
+
+  /* ---------- OWNER SETUP ---------- */
+  document.getElementById("ownerForm").addEventListener("submit", async function (e) {
+    e.preventDefault(); hideErr("oErr");
+    var btn = document.getElementById("oBtn"); btn.disabled = true; btn.textContent = "Ruko...";
+    try {
+      var email = document.getElementById("oEmail").value.trim();
+      var pass = document.getElementById("oPass").value;
+      var secret = document.getElementById("oSecret").value.trim();
+      var s = await sb.auth.signInWithPassword({ email: email, password: pass });
+      if (s.error) {
+        var r2 = await sb.auth.signUp({ email: email, password: pass });
+        if (r2.error) throw r2.error;
+        if (!r2.data.session) throw new Error("Pehle email confirm karo, phir dobara try karo.");
+      }
+      var rpc = await sb.rpc("claim_owner", { secret: secret });
+      if (rpc.error) throw rpc.error;
+      A.toast("👑 Tum owner ban gaye!");
+      setTimeout(function () { window.location.href = "admin.html"; }, 900);
+    } catch (err) {
+      showErr("oErr", "Owner setup nahi hua: " + err.message);
+      btn.disabled = false; btn.textContent = "Claim Owner 👑";
+    }
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a13">
+<title>Omi Bhai — Dashboard</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <div style="font-weight:900;font-size:20px;letter-spacing:2px">⚡ OMI BHAI</div>
+      <div class="who" id="uEmail"></div>
+    </div>
+    <div class="actions">
+      <a href="admin.html" id="adminLink" class="btn btn-small btn-ghost hidden" style="text-decoration:none">👑 Admin</a>
+      <button class="btn btn-small btn-ghost" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <div id="cfgWarn" class="warn hidden">
+    ⚠️ <b>Supabase connect nahi hua!</b><br>
+    <span style="font-size:13px">frontend/config.js me apni SUPABASE_URL aur
+    SUPABASE_ANON_KEY likho. Tareeqa DEPLOY_GUIDE.md me hai.</span>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="card">
+    <div class="sec-title">🔍 Search Customer</div>
+    <div class="searchbar">
+      <span class="ico">🔍</span>
+      <input type="search" id="q" placeholder="Naam, number, address, city ya CNIC likho..." autocomplete="off">
+    </div>
+    <div class="meta-line" id="resMeta"></div>
+  </div>
+
+  <div id="results"></div>
+
+  <div class="divider"></div>
+
+  <!-- ADD -->
+  <div class="card">
+    <div class="sec-title">➕ Naya Customer</div>
+    <form id="addForm">
+      <div class="grid2">
+        <div>
+          <label>Naam *</label>
+          <input id="fName" required placeholder="Customer ka naam">
+        </div>
+        <div>
+          <label>Phone Number *</label>
+          <input id="fPhone" required inputmode="tel" placeholder="03xx-xxxxxxx">
+        </div>
+      </div>
+      <label>Address</label>
+      <input id="fAddress" placeholder="Makaan / building / gali / mohalla">
+      <div class="grid2">
+        <div>
+          <label>City</label>
+          <input id="fCity" placeholder="Sheher ka naam">
+        </div>
+        <div>
+          <label>CNIC</label>
+          <input id="fCnic" inputmode="numeric" placeholder="35202-xxxxxxx-x">
+        </div>
+      </div>
+      <label>Service Date</label>
+      <input id="fDate" type="date">
+      <button class="btn btn-primary" type="submit" id="addBtn">💾 Save Customer</button>
+    </form>
+  </div>
+
+  <!-- CSV IMPORT -->
+  <div class="card">
+    <div class="sec-title">📥 CSV se Bulk Import</div>
+    <p>Excel me file kholo → <b>CSV</b> me save karo → yahan select karo.
+    Header me <b>name</b> aur <b>phone</b> zaroori hain (address, city, cnic, service_date optional).</p>
+    <label>CSV File</label>
+    <input type="file" id="csvFile" accept=".csv,.txt">
+    <div class="progress hidden" id="csvProg"><div></div></div>
+    <div class="meta-line" id="csvMeta"></div>
+    <button class="btn btn-primary hidden" id="csvBtn">⬆️ Import shuru karo</button>
+  </div>
+
+  <!-- EDIT MODAL -->
+  <div id="editModal" class="modal hidden">
+    <div class="modal-box card">
+      <h2>✏️ Edit Customer</h2>
+      <input type="hidden" id="eId">
+      <label>Naam *</label><input id="eName" required>
+      <label>Phone Number *</label><input id="ePhone" required inputmode="tel">
+      <label>Address</label><input id="eAddress">
+      <label>City</label><input id="eCity">
+      <label>CNIC</label><input id="eCnic" inputmode="numeric">
+      <label>Service Date</label><input id="eDate" type="date">
+      <button class="btn btn-primary" id="eSave">💾 Save</button>
+      <button class="btn btn-ghost" id="eClose">Cancel</button>
+    </div>
+  </div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var A = window.OmiApp;
+  var sb, me, lastTerm = "";
+
+  function showCfg() { A.showConfigError(); }
+
+  (async function init() {
+    try { A.getSupabase(); } catch (e) { showCfg(); return; }
+    var g = await A.guardStaff();
+    if (!g) return;
+    sb = g.sb; me = g.session.user;
+    if (g.profile.is_admin) document.getElementById("adminLink").classList.remove("hidden");
+    document.getElementById("uEmail").textContent = me.email || "";
+    document.getElementById("logoutBtn").addEventListener("click", function () { A.logout(sb); });
+
+    bindSearch(); bindAdd(); bindEdit(); bindCSV();
+    await doSearch("");
+  })();
+
+  /* ---------------- SEARCH ---------------- */
+  function bindSearch() {
+    var q = document.getElementById("q");
+    q.addEventListener("input", A.debounce(function () { doSearch(q.value); }, 350));
+  }
+
+  async function doSearch(term) {
+    lastTerm = term;
+    term = A.sanitizeLike(term);
+    var query = sb.from("customers").select("*").order("created_at", { ascending: false }).limit(60);
+    if (term) {
+      var like = "%" + term + "%";
+      query = query.or("name.ilike." + like + ",phone.ilike." + like +
+        ",address.ilike." + like + ",city.ilike." + like + ",cnic.ilike." + like);
+    }
+    var r = await query;
+    if (r.error) { A.toast("Search me masla: " + r.error.message, "err"); return; }
+    document.getElementById("resMeta").textContent =
+      r.data.length + " record mile" + (term ? ' — "' + term + '"' : " (taza tareen)");
+    A.renderCustomers(document.getElementById("results"), r.data, {
+      onEdit: openEdit,
+      onDelete: delCustomer
+    });
+  }
+
+  /* ---------------- ADD ---------------- */
+  function bindAdd() {
+    document.getElementById("addForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      var btn = document.getElementById("addBtn");
+      btn.disabled = true; btn.textContent = "Save ho raha...";
+      try {
+        var rec = {
+          name: document.getElementById("fName").value.trim(),
+          phone: document.getElementById("fPhone").value.trim(),
+          address: document.getElementById("fAddress").value.trim() || null,
+          city: document.getElementById("fCity").value.trim() || null,
+          cnic: document.getElementById("fCnic").value.trim() || null,
+          service_date: document.getElementById("fDate").value || null,
+          created_by: me.id
+        };
+        if (!rec.name || !rec.phone) throw new Error("Naam aur phone zaroori hain.");
+        var r = await sb.from("customers").insert(rec);
+        if (r.error) throw r.error;
+        A.toast("✅ Customer save ho gaya!");
+        e.target.reset();
+        await doSearch(lastTerm);
+      } catch (err) { A.toast("Save nahi hua: " + err.message, "err"); }
+      btn.disabled = false; btn.textContent = "💾 Save Customer";
+    });
+  }
+
+  /* ---------------- EDIT ---------------- */
+  function bindEdit() {
+    document.getElementById("eClose").addEventListener("click", function () {
+      document.getElementById("editModal").classList.add("hidden");
+    });
+    document.getElementById("eSave").addEventListener("click", async function () {
+      var id = document.getElementById("eId").value;
+      var btn = document.getElementById("eSave");
+      btn.disabled = true;
+      try {
+        var upd = {
+          name: document.getElementById("eName").value.trim(),
+          phone: document.getElementById("ePhone").value.trim(),
+          address: document.getElementById("eAddress").value.trim() || null,
+          city: document.getElementById("eCity").value.trim() || null,
+          cnic: document.getElementById("eCnic").value.trim() || null,
+          service_date: document.getElementById("eDate").value || null
+        };
+        if (!upd.name || !upd.phone) throw new Error("Naam aur phone zaroori hain.");
+        var r = await sb.from("customers").update(upd).eq("id", id);
+        if (r.error) throw r.error;
+        A.toast("✅ Update ho gaya!");
+        document.getElementById("editModal").classList.add("hidden");
+        await doSearch(lastTerm);
+      } catch (err) { A.toast("Update nahi hua: " + err.message, "err"); }
+      btn.disabled = false;
+    });
+  }
+
+  function openEdit(c) {
+    document.getElementById("eId").value = c.id;
+    document.getElementById("eName").value = c.name || "";
+    document.getElementById("ePhone").value = c.phone || "";
+    document.getElementById("eAddress").value = c.address || "";
+    document.getElementById("eCity").value = c.city || "";
+    document.getElementById("eCnic").value = c.cnic || "";
+    document.getElementById("eDate").value = c.service_date || "";
+    document.getElementById("editModal").classList.remove("hidden");
+  }
+
+  async function delCustomer(c) {
+    if (!confirm('Delete karna hai?\n\n' + c.name + " — " + c.phone)) return;
+    var r = await sb.from("customers").delete().eq("id", c.id);
+    if (r.error) { A.toast("Delete nahi hua: " + r.error.message, "err"); return; }
+    A.toast("🗑 Delete ho gaya");
+    await doSearch(lastTerm);
+  }
+
+  /* ---------------- CSV IMPORT ---------------- */
+  var csvRows = [];
+  function bindCSV() {
+    var fileInput = document.getElementById("csvFile");
+    var btn = document.getElementById("csvBtn");
+    fileInput.addEventListener("change", function () {
+      var f = fileInput.files[0];
+      if (!f) return;
+      var rd = new FileReader();
+      rd.onload = function () {
+        try {
+          var rows = A.parseCSV(rd.result);
+          if (rows.length < 2) throw new Error("File khaali hai ya header nahi hai.");
+          var headers = rows[0].map(A.normHeader);
+          csvRows = rows.slice(1).map(function (cells) { return A.mapRow(headers, cells); })
+            .filter(function (r) { return r.name && r.phone; });
+          document.getElementById("csvMeta").textContent =
+            "✅ " + csvRows.length + " sahi rows mili (name+phone wali). Ab 'Import shuru karo' dabao.";
+          btn.classList.remove("hidden");
+        } catch (err) {
+          document.getElementById("csvMeta").textContent = "❌ " + err.message;
+          btn.classList.add("hidden"); csvRows = [];
+        }
+      };
+      rd.readAsText(f, "utf-8");
+    });
+
+    btn.addEventListener("click", async function () {
+      if (!csvRows.length) return;
+      btn.disabled = true;
+      var prog = document.getElementById("csvProg");
+      var bar = prog.querySelector("div");
+      prog.classList.remove("hidden");
+      var done = 0, failed = 0, total = csvRows.length, BATCH = 25;
+      for (var i = 0; i < total; i += BATCH) {
+        var chunk = csvRows.slice(i, i + BATCH).map(function (r) {
+          return {
+            name: r.name, phone: r.phone,
+            address: r.address || null, city: r.city || null,
+            cnic: r.cnic || null, service_date: r.service_date || null,
+            created_by: me.id
+          };
+        });
+        var r = await sb.from("customers").insert(chunk);
+        if (r.error) { failed += chunk.length; }
+        else { done += chunk.length; }
+        bar.style.width = Math.round(((i + chunk.length) / total) * 100) + "%";
+        document.getElementById("csvMeta").textContent =
+          "⏳ " + (i + chunk.length) + " / " + total + " rows...";
+      }
+      document.getElementById("csvMeta").textContent =
+        "🏁 Ho gaya! " + done + " save hue" + (failed ? ", " + failed + " fail hue." : ".");
+      A.toast("📥 Import mukammal: " + done + " customers");
+      btn.disabled = false; btn.classList.add("hidden");
+      fileInput.value = ""; csvRows = [];
+      await doSearch(lastTerm);
+    });
+  }
+})();
+</script>
+</body>
+</html>

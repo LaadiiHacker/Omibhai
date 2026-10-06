@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a13">
+<title>Omi Bhai — Admin Panel</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <div style="font-weight:900;font-size:20px;letter-spacing:2px">👑 ADMIN PANEL</div>
+      <div class="who" id="uEmail"></div>
+    </div>
+    <div class="actions">
+      <a href="app.html" class="btn btn-small btn-ghost" style="text-decoration:none">📋 Dashboard</a>
+      <button class="btn btn-small btn-ghost" id="logoutBtn">Logout</button>
+    </div>
+  </div>
+
+  <div id="cfgWarn" class="warn hidden">
+    ⚠️ <b>Supabase connect nahi hua!</b><br>
+    <span style="font-size:13px">frontend/config.js me apni SUPABASE_URL aur
+    SUPABASE_ANON_KEY likho.</span>
+  </div>
+
+  <!-- PENDING APPROVALS -->
+  <div class="card">
+    <div class="sec-title">⏳ Pending Approvals</div>
+    <p>Naya staff register karega to yahan aayega. <b>Approve</b> dabao ge tab hi uska login chalega.</p>
+    <div id="pendingList"><p class="muted">Load ho raha...</p></div>
+  </div>
+
+  <!-- STAFF -->
+  <div class="card">
+    <div class="sec-title">👷 Staff (Approved)</div>
+    <div id="staffList"><p class="muted">Load ho raha...</p></div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ALL CUSTOMERS -->
+  <div class="card">
+    <div class="sec-title">📋 Saare Customers</div>
+    <div class="searchbar">
+      <span class="ico">🔍</span>
+      <input type="search" id="q" placeholder="Search naam / number / city..." autocomplete="off">
+    </div>
+    <div class="meta-line" id="resMeta"></div>
+  </div>
+  <div id="results"></div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var A = window.OmiApp;
+  var sb, lastTerm = "";
+
+  (async function init() {
+    try { A.getSupabase(); } catch (e) { A.showConfigError(); return; }
+    var g = await A.guardAdmin();
+    if (!g) return;
+    sb = g.sb;
+    document.getElementById("uEmail").textContent = g.session.user.email || "";
+    document.getElementById("logoutBtn").addEventListener("click", function () { A.logout(sb); });
+
+    var q = document.getElementById("q");
+    q.addEventListener("input", A.debounce(function () { doSearch(q.value); }, 350));
+
+    await loadPeople();
+    await doSearch("");
+  })();
+
+  /* ---------------- STAFF LISTS ---------------- */
+  async function loadPeople() {
+    var r = await sb.from("profiles").select("*").order("created_at", { ascending: false });
+    if (r.error) { A.toast("Load error: " + r.error.message, "err"); return; }
+    var pending = r.data.filter(function (p) { return !p.approved && !p.is_admin; });
+    var staff = r.data.filter(function (p) { return p.approved && !p.is_admin; });
+
+    var pl = document.getElementById("pendingList");
+    pl.innerHTML = pending.length ? "" : '<p class="muted">Koi pending request nahi. 🎉</p>';
+    pending.forEach(function (p) {
+      var d = document.createElement("div");
+      d.className = "staff-row";
+      d.innerHTML = '<div><div class="em">' + A.esc(p.email || "?") + '</div>' +
+        '<div class="dt">' + new Date(p.created_at).toLocaleString() + '</div></div>' +
+        '<div class="ops"><button class="btn btn-small btn-ok">✅ Approve</button>' +
+        '<button class="btn btn-small btn-danger">✖</button></div>';
+      var btns = d.querySelectorAll("button");
+      btns[0].onclick = function () { setApproved(p.id, true); };
+      btns[1].onclick = function () { removeProfile(p); };
+      pl.appendChild(d);
+    });
+
+    var sl = document.getElementById("staffList");
+    sl.innerHTML = staff.length ? "" : '<p class="muted">Abhi koi approved staff nahi.</p>';
+    staff.forEach(function (p) {
+      var d = document.createElement("div");
+      d.className = "staff-row";
+      d.innerHTML = '<div><div class="em">' + A.esc(p.email || "?") + '</div>' +
+        '<div class="dt">' + new Date(p.created_at).toLocaleString() + '</div></div>' +
+        '<div class="ops"><button class="btn btn-small btn-danger">⏸ Disable</button></div>';
+      d.querySelector("button").onclick = function () { setApproved(p.id, false); };
+      sl.appendChild(d);
+    });
+  }
+
+  async function setApproved(id, val) {
+    var r = await sb.from("profiles").update({ approved: val }).eq("id", id);
+    if (r.error) { A.toast("Error: " + r.error.message, "err"); return; }
+    A.toast(val ? "✅ Approve ho gaya!" : "⏸ Disable kar diya");
+    await loadPeople();
+  }
+
+  async function removeProfile(p) {
+    if (!confirm("Is request ko hata do?\n\n" + (p.email || ""))) return;
+    var r = await sb.from("profiles").delete().eq("id", p.id);
+    if (r.error) { A.toast("Error: " + r.error.message, "err"); return; }
+    A.toast("🗑 Hata diya");
+    await loadPeople();
+  }
+
+  /* ---------------- CUSTOMERS ---------------- */
+  async function doSearch(term) {
+    lastTerm = term;
+    term = A.sanitizeLike(term);
+    var query = sb.from("customers").select("*").order("created_at", { ascending: false }).limit(60);
+    if (term) {
+      var like = "%" + term + "%";
+      query = query.or("name.ilike." + like + ",phone.ilike." + like +
+        ",address.ilike." + like + ",city.ilike." + like + ",cnic.ilike." + like);
+    }
+    var r = await query;
+    if (r.error) { A.toast("Search me masla: " + r.error.message, "err"); return; }
+    document.getElementById("resMeta").textContent = r.data.length + " record mile";
+    A.renderCustomers(document.getElementById("results"), r.data, {
+      onDelete: async function (c) {
+        if (!confirm('Delete karna hai?\n\n' + c.name + " — " + c.phone)) return;
+        var d = await sb.from("customers").delete().eq("id", c.id);
+        if (d.error) { A.toast("Delete nahi hua: " + d.error.message, "err"); return; }
+        A.toast("🗑 Delete ho gaya");
+        await doSearch(lastTerm);
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>
