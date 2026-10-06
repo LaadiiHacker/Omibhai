@@ -1,0 +1,14 @@
+# Omi Bhai — Netlify settings
+# Deploy karte waqt Netlify ye file khud parh lega.
+
+[build]
+  publish = "frontend"
+  # Koi build command nahi — plain HTML/CSS/JS hai.
+
+# Jo page na mile wo index.html khol de (taake refresh par
+# login page na toote). Maujood files (app.html, admin.html)
+# pehle serve hongi, ye sirf fallback hai.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
