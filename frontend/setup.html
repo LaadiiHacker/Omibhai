@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0a0a13">
+<title>Omi Bhai — Owner Setup</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</head>
+<body>
+<div class="bg-fx"></div>
+<div class="wrap">
+
+  <header class="brand">
+    <div class="logo">⚡</div>
+    <h1>OMI BHAI</h1>
+    <p class="tagline">Owner Setup</p>
+  </header>
+
+  <div id="cfgWarn" class="warn hidden">
+    ⚠️ <b>Supabase connect nahi hua!</b><br>
+    <span style="font-size:13px">frontend/config.js me apni SUPABASE_URL aur
+    SUPABASE_ANON_KEY likho.</span>
+  </div>
+
+  <div class="card">
+    <h2>👑 Owner Setup <span style="font-size:12px;color:var(--muted)">(sirf pehli dafa — ye page sirf tumhare liye hai)</span></h2>
+    <p>Apne email + password se login karo, phir wo <b>secret</b> likho jo tumne
+    Supabase me <b>owner_secret</b> ke naam se set kiya tha.</p>
+    <form id="ownerForm">
+      <label>Email</label>
+      <input type="email" id="oEmail" required placeholder="tumhara@email.com">
+      <label>Password</label>
+      <input type="password" id="oPass" required placeholder="••••••••">
+      <label>Owner Secret</label>
+      <input type="text" id="oSecret" required autocomplete="off" placeholder="Tumhara secret">
+      <button class="btn btn-primary" type="submit" id="oBtn">Claim Owner 👑</button>
+    </form>
+    <div id="oErr" class="err-box hidden"></div>
+    <div id="oOk" class="ok-box hidden"></div>
+  </div>
+
+</div>
+<div id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var A = window.OmiApp;
+  var sb;
+  try { sb = A.getSupabase(); }
+  catch (e) { A.showConfigError(); return; }
+
+  function showErr(msg) {
+    var el = document.getElementById("oErr");
+    el.textContent = msg; el.classList.remove("hidden");
+  }
+
+  /* Agar owner pehle se bana hua hai aur yehi owner hai → admin panel */
+  sb.auth.getSession().then(async function (res) {
+    var s = res.data.session;
+    if (!s) return;
+    try {
+      var p = await A.getMyProfile(sb, s.user.id);
+      if (p && p.is_admin) window.location.href = "admin.html";
+    } catch (e) { /* chup raho, form dikhao */ }
+  });
+
+  document.getElementById("ownerForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    document.getElementById("oErr").classList.add("hidden");
+    document.getElementById("oOk").classList.add("hidden");
+    var btn = document.getElementById("oBtn"); btn.disabled = true; btn.textContent = "Ruko...";
+    try {
+      var email = document.getElementById("oEmail").value.trim();
+      var pass = document.getElementById("oPass").value;
+      var secret = document.getElementById("oSecret").value.trim();
+      var s = await sb.auth.signInWithPassword({ email: email, password: pass });
+      if (s.error) {
+        var r2 = await sb.auth.signUp({ email: email, password: pass });
+        if (r2.error) throw r2.error;
+        if (!r2.data.session) throw new Error("Session nahi bani — dobara try karo.");
+      }
+      var rpc = await sb.rpc("claim_owner", { secret: secret });
+      if (rpc.error) throw rpc.error;
+      var ok = document.getElementById("oOk");
+      ok.textContent = "👑 Tum owner ban gaye! Admin panel khul raha hai...";
+      ok.classList.remove("hidden");
+      setTimeout(function () { window.location.href = "admin.html"; }, 1200);
+    } catch (err) {
+      showErr("Owner setup nahi hua: " + err.message);
+      btn.disabled = false; btn.textContent = "Claim Owner 👑";
+    }
+  });
+})();
+</script>
+</body>
+</html>

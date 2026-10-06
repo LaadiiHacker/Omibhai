@@ -30,7 +30,6 @@
     <div class="tabs">
       <button class="tab active" data-tab="login">Login</button>
       <button class="tab" data-tab="register">Register</button>
-      <button class="tab" data-tab="owner">Owner Setup</button>
     </div>
 
     <!-- LOGIN -->
@@ -62,22 +61,6 @@
       <div id="rOk" class="ok-box hidden"></div>
     </section>
 
-    <!-- OWNER SETUP -->
-    <section id="tab-owner" class="card hidden">
-      <h2>👑 Owner Setup <span style="font-size:12px;color:var(--muted)">(sirf pehli dafa)</span></h2>
-      <p>Apne email + password se login karo, phir wo <b>secret</b> likho jo tumne
-      Supabase me <b>owner_secret</b> ke naam se set kiya tha.</p>
-      <form id="ownerForm">
-        <label>Email</label>
-        <input type="email" id="oEmail" required placeholder="tumhara@email.com">
-        <label>Password</label>
-        <input type="password" id="oPass" required placeholder="••••••••">
-        <label>Owner Secret</label>
-        <input type="text" id="oSecret" required autocomplete="off" placeholder="Tumhara secret">
-        <button class="btn btn-primary" type="submit" id="oBtn">Claim Owner 👑</button>
-      </form>
-      <div id="oErr" class="err-box hidden"></div>
-    </section>
   </div>
 
   <!-- WAITING (approved nahi hue abhi) -->
@@ -100,7 +83,7 @@
     btn.addEventListener("click", function () {
       document.querySelectorAll(".tab").forEach(function (b) { b.classList.remove("active"); });
       btn.classList.add("active");
-      ["login", "register", "owner"].forEach(function (t) {
+      ["login", "register"].forEach(function (t) {
         document.getElementById("tab-" + t).classList.toggle("hidden", t !== btn.dataset.tab);
       });
     });
@@ -140,7 +123,7 @@
     try {
       var email = document.getElementById("lEmail").value.trim();
       var pass = document.getElementById("lPass").value;
-      var r = await sb.auth.signInWithPassword({ email: email, password: password });
+      var r = await sb.auth.signInWithPassword({ email: email, password: pass });
       if (r.error) throw r.error;
       var p = await A.getMyProfile(sb, r.data.user.id);
       if (!p || !p.approved) { window.location.reload(); return; }
@@ -175,29 +158,6 @@
     btn.disabled = false; btn.textContent = "Request bhejo";
   });
 
-  /* ---------- OWNER SETUP ---------- */
-  document.getElementById("ownerForm").addEventListener("submit", async function (e) {
-    e.preventDefault(); hideErr("oErr");
-    var btn = document.getElementById("oBtn"); btn.disabled = true; btn.textContent = "Ruko...";
-    try {
-      var email = document.getElementById("oEmail").value.trim();
-      var pass = document.getElementById("oPass").value;
-      var secret = document.getElementById("oSecret").value.trim();
-      var s = await sb.auth.signInWithPassword({ email: email, password: pass });
-      if (s.error) {
-        var r2 = await sb.auth.signUp({ email: email, password: pass });
-        if (r2.error) throw r2.error;
-        if (!r2.data.session) throw new Error("Pehle email confirm karo, phir dobara try karo.");
-      }
-      var rpc = await sb.rpc("claim_owner", { secret: secret });
-      if (rpc.error) throw rpc.error;
-      A.toast("👑 Tum owner ban gaye!");
-      setTimeout(function () { window.location.href = "admin.html"; }, 900);
-    } catch (err) {
-      showErr("oErr", "Owner setup nahi hua: " + err.message);
-      btn.disabled = false; btn.textContent = "Claim Owner 👑";
-    }
-  });
 })();
 </script>
 </body>
