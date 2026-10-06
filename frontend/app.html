@@ -45,8 +45,8 @@
 
   <div class="divider"></div>
 
-  <!-- ADD -->
-  <div class="card">
+  <!-- ADD (sirf owner) -->
+  <div class="card" id="addCard">
     <div class="sec-title">➕ Naya Customer</div>
     <form id="addForm">
       <div class="grid2">
@@ -77,8 +77,8 @@
     </form>
   </div>
 
-  <!-- CSV IMPORT -->
-  <div class="card">
+  <!-- CSV IMPORT (sirf owner) -->
+  <div class="card" id="csvCard">
     <div class="sec-title">📥 CSV se Bulk Import</div>
     <p>Excel me file kholo → <b>CSV</b> me save karo → yahan select karo.
     Header me <b>name</b> aur <b>phone</b> zaroori hain (address, city, cnic, service_date optional).</p>
@@ -112,7 +112,7 @@
 (function () {
   "use strict";
   var A = window.OmiApp;
-  var sb, me, lastTerm = "";
+  var sb, me, lastTerm = "", isAdmin = false;
 
   function showCfg() { A.showConfigError(); }
 
@@ -121,7 +121,14 @@
     var g = await A.guardStaff();
     if (!g) return;
     sb = g.sb; me = g.session.user;
-    if (g.profile.is_admin) document.getElementById("adminLink").classList.remove("hidden");
+    isAdmin = !!g.profile.is_admin;
+    if (isAdmin) {
+      document.getElementById("adminLink").classList.remove("hidden");
+    } else {
+      // Staff: sirf search/dekh sakta hai — add/edit/delete sirf owner karega
+      document.getElementById("addCard").classList.add("hidden");
+      document.getElementById("csvCard").classList.add("hidden");
+    }
     document.getElementById("uEmail").textContent = me.email || "";
     document.getElementById("logoutBtn").addEventListener("click", function () { A.logout(sb); });
 
@@ -149,8 +156,8 @@
     document.getElementById("resMeta").textContent =
       r.data.length + " record mile" + (term ? ' — "' + term + '"' : " (taza tareen)");
     A.renderCustomers(document.getElementById("results"), r.data, {
-      onEdit: openEdit,
-      onDelete: delCustomer
+      onEdit: isAdmin ? openEdit : null,
+      onDelete: isAdmin ? delCustomer : null
     });
   }
 
